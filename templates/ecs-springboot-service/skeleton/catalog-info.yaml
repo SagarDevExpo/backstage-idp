@@ -1,0 +1,24 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.appName }}
+  description: ${{ values.description }}
+  annotations:
+    gitlab.com/project-slug: ecommerce/${{ values.appName }}
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - spring-boot
+    - ecs-fargate
+    - java
+  links:
+    - url: https://console.aws.amazon.com/ecs/home?region=us-east-1#/clusters/${{ values.appName }}-cluster
+      title: ECS Cluster
+      icon: cloud
+spec:
+  type: service
+  lifecycle: production
+  owner: ${{ values.team }}
+  system: ecommerce
+  providesApis: []
+  dependsOn:
+    - resource:default/oracle-rds

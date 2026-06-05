@@ -1,0 +1,52 @@
+{
+  "family": "${{ values.appName }}",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${{ values.awsAccountId }}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::${{ values.awsAccountId }}:role/${{ values.appName }}-task-role",
+  "containerDefinitions": [
+    {
+      "name": "${{ values.appName }}",
+      "image": "${{ values.awsAccountId }}.dkr.ecr.us-east-1.amazonaws.com/${{ values.appName }}:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/${{ values.appName }}",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "environment": [
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "${{ values.environment }}"
+        },
+        {
+          "name": "APP_NAME",
+          "value": "${{ values.appName }}"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:${{ values.awsAccountId }}:secret:${{ values.appName }}/db-password"
+        }
+      ]
+    }
+  ]
+}

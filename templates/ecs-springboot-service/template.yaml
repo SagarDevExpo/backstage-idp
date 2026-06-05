@@ -1,0 +1,126 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: ecs-springboot-service
+  title: ECS Microservice (Spring Boot + Fargate + ALB)
+  description: |
+    Creates a new GitLab repo with a Spring Boot scaffold, Dockerfile,
+    ECS task definition, and registers the app in the pipeline generator.
+  tags:
+    - spring-boot
+    - ecs
+    - fargate
+    - java
+spec:
+  owner: platform-engineering
+  type: service
+
+  parameters:
+    - title: Service Details
+      required:
+        - appName
+        - team
+        - environment
+      properties:
+        appName:
+          title: Application Name
+          type: string
+          pattern: '^svc-[a-z0-9-]+$'
+          description: "Must start with 'svc-' (e.g., svc-order-processor)"
+          ui:autofocus: true
+        team:
+          title: Team
+          type: string
+          enum:
+            - payments
+            - ecommerce
+            - fulfillment
+            - platform
+          enumNames:
+            - Payments
+            - E-Commerce
+            - Fulfillment
+            - Platform Engineering
+        environment:
+          title: Target Environment
+          type: string
+          enum:
+            - dev
+            - cert
+            - prod
+        awsAccountId:
+          title: AWS Account ID
+          type: string
+          pattern: '^\d{12}$'
+          description: "12-digit AWS account number"
+        javaVersion:
+          title: Java Version
+          type: string
+          default: "17"
+          enum:
+            - "17"
+            - "21"
+
+    - title: Repository Configuration
+      properties:
+        repoOwner:
+          title: GitLab Group
+          type: string
+          default: ecommerce
+        description:
+          title: Service Description
+          type: string
+          default: "A new ECS microservice"
+
+  steps:
+    # Step 1: Generate code from skeleton
+    - id: fetch-skeleton
+      name: Fetch Spring Boot Skeleton
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          appName: ${{ parameters.appName }}
+          team: ${{ parameters.team }}
+          environment: ${{ parameters.environment }}
+          awsAccountId: ${{ parameters.awsAccountId }}
+          javaVersion: ${{ parameters.javaVersion }}
+          description: ${{ parameters.description }}
+
+    # Step 2: Create GitLab repository
+    - id: publish-gitlab
+      name: Create GitLab Repository
+      action: publish:gitlab
+      input:
+        repoUrl: gitlab.example.com?owner=${{ parameters.repoOwner }}&repo=${{ parameters.appName }}
+        defaultBranch: main
+        repoVisibility: internal
+        description: ${{ parameters.description }}
+
+    # Step 3: Register app in pipeline generator (triggers CodePipeline)
+    - id: register-pipeline
+      name: Register in Pipeline Generator
+      action: gitlab:repo:push
+      input:
+        repoUrl: gitlab.example.com?owner=platform&repo=pipeline-generator
+        branchName: onboard/${{ parameters.appName }}
+        commitMessage: "feat: onboard ${{ parameters.appName }} to ${{ parameters.environment }}-${{ parameters.awsAccountId }}"
+        targetPath: environments/${{ parameters.environment }}-${{ parameters.awsAccountId }}.json
+
+    # Step 4: Register in Backstage catalog
+    - id: register-catalog
+      name: Register in Backstage Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['publish-gitlab'].output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+
+  output:
+    links:
+      - title: GitLab Repository
+        url: ${{ steps['publish-gitlab'].output.remoteUrl }}
+      - title: Open in Backstage Catalog
+        icon: catalog
+        entityRef: ${{ steps['register-catalog'].output.entityRef }}
+      - title: Pipeline Generator PR
+        url: ${{ steps['register-pipeline'].output.mergeRequestUrl }}
